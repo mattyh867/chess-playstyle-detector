@@ -185,8 +185,8 @@ def main():
     parser.add_argument('--pgn', required=True, help='Path to PGN file')
     parser.add_argument('--stockfish', required=True, help='Path to Stockfish binary')
     parser.add_argument('--output', default='labeled_games.csv', help='Output CSV path')
-    parser.add_argument('--depth', type=int, default=18, help='Analysis depth')
-    parser.add_argument('--min-rating', type=int, default=2000, help='Minimum player rating')
+    parser.add_argument('--depth', type=int, default=12, help='Analysis depth')
+    parser.add_argument('--min-rating', type=int, default=1500, help='Minimum player rating')
     parser.add_argument('--max-games', type=int, default=5000, help='Maximum games to process')
     
     args = parser.parse_args()

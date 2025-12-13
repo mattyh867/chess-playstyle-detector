@@ -31,6 +31,10 @@ class GameFeatures:
     simplifications: int = 0
     defensive_moves: int = 0
     counterattacks: int = 0
+    material_equality_maintained: int = 0
+    retreat_moves: int = 0
+    trades_when_losing: int = 0 
+    passive_moves: int = 0 
 
     # General metrics
     total_moves: int = 0
@@ -65,46 +69,36 @@ class ChessGameAnalyzer:
         for move in moves:
             move_number += 1
             
-            # Only analyze moves for the specified color
             if board.turn != color:
                 board.push(move)
                 continue
             
             features.total_moves += 1
             
-            # Get engine evaluation before move
             try:
                 info_before = self.engine.analyse(board, chess.engine.Limit(depth=self.depth))
                 eval_before = self._get_centipawn_score(info_before, board.turn)
                 
-                # Get best move
                 best_move = info_before.get("pv", [None])[0]
                 
-                # Apply the actual move
                 board.push(move)
                 
-                # Get evaluation after move
                 info_after = self.engine.analyse(board, chess.engine.Limit(depth=self.depth))
                 eval_after = self._get_centipawn_score(info_after, not board.turn)
                 
-                # Calculate centipawn loss
                 cp_loss = eval_before - eval_after
                 features.avg_centipawn_loss += abs(cp_loss)
                 
-                # Track if best move was played
                 if move == best_move:
                     features.best_moves_found += 1
                 
-                # Analyze move characteristics
                 self._analyze_move_type(board, move, features, move_number, eval_before, eval_after)
                 
-                # Track blunders (losing 200+ centipawns)
                 if cp_loss < -200:
                     features.blunders += 1
                 elif abs(cp_loss) < 20 and abs(eval_after) > 100:
                     features.tactical_shots += 1
                 
-                # Track complex positions (high engine uncertainty or multiple good moves)
                 if self._is_complex_position(info_before):
                     features.complex_positions += 1
                 
@@ -115,7 +109,6 @@ class ChessGameAnalyzer:
                 board.push(move)
                 continue
         
-        # Calculate averages
         if features.total_moves > 0:
             features.avg_centipawn_loss /= features.total_moves
         
@@ -132,7 +125,6 @@ class ChessGameAnalyzer:
             mate_in = score.relative.mate()
             return 10000 if mate_in > 0 else -10000
         
-        # Get centipawn score from perspective of player to move
         cp = score.relative.score()
         return cp if cp is not None else 0.0
     
@@ -140,62 +132,62 @@ class ChessGameAnalyzer:
         """Determine if position is complex based on engine analysis"""
         # Check if there are multiple moves with similar evaluations
         pv = info.get("pv", [])
-        return len(pv) > 0 and len(pv) < 3  # Short best line indicates complexity
+        return len(pv) > 0 and len(pv) < 3 
     
     def _analyze_move_type(self, board: chess.Board, move: chess.Move, features: GameFeatures, move_number: int,
                            eval_before: float, eval_after: float):
         """Analyze what type of move was played"""
         
-        # Go back one move to analyze
         board.pop()
         
-        # Check for checks
         board.push(move)
         if board.is_check():
             features.checks_given += 1
         board.pop()
         
-        # Check for captures
         if board.is_capture(move):
             features.captures_made += 1
             
-            # Check if it's a material sacrifice (losing material but improving position)
             piece_value = self._get_piece_value(board.piece_at(move.from_square))
             captured_value = self._get_piece_value(board.piece_at(move.to_square))
             
             if piece_value > captured_value and eval_after > eval_before - 50:
                 features.material_sacrifices += 1
         
-        # Check for early attacks (before move 15)
         if move_number <= 15:
             if self._is_attacking_move(board, move):
                 features.early_attacks += 1
         
-        # Check for king safety risks
         if board.piece_at(move.from_square).piece_type == chess.KING:
-            if move_number < 10:  # Moving king early
+            if move_number < 10:
                 features.king_safety_risks += 1
         
-        # Check for simplifications (trading pieces in advantageous positions)
         if board.is_capture(move) and eval_before >= -50:
             features.simplifications += 1
         
-        # Check for prophylactic moves (improving position without immediate threat)
         if not board.is_capture(move) and not board.is_check() and eval_after > eval_before:
-            if eval_after - eval_before < 50:  # Small improvement
+            if eval_after - eval_before < 50:
                 features.prophylactic_moves += 1
-        
-        # Check for positional sacrifices (pawn sacrifices for compensation)
+
         if board.piece_at(move.from_square).piece_type == chess.PAWN:
             if board.is_capture(move) and eval_after > eval_before:
                 features.positional_sacrifices += 1
         
-        # Defensive moves (moving pieces back or blocking)
-        if eval_before < -100:  # In a worse position
+        # Defensive moves
+        if eval_before < -100:
             if not board.is_capture(move) and not self._is_attacking_move(board, move):
                 features.defensive_moves += 1
             elif board.is_capture(move):
                 features.counterattacks += 1
+        
+        if self._is_retreat_move(board, move, eval_before):
+            features.retreat_moves += 1
+        
+        if self._is_trades_when_losing(board, move, eval_before):
+            features.trades_when_losing += 1
+        
+        if self._is_passive_move(board, move, eval_before, eval_after):
+            features.passive_moves += 1
         
         board.push(move)
     
@@ -216,7 +208,6 @@ class ChessGameAnalyzer:
         """Check if move is attacking (creates threats)"""
         board.push(move)
         
-        # Check if move attacks opponent pieces
         attacks = False
         for square in chess.SQUARES:
             piece = board.piece_at(square)
@@ -227,29 +218,87 @@ class ChessGameAnalyzer:
         
         board.pop()
         return attacks
+    
+    def _is_retreat_move(self, board: chess.Board, move: chess.Move, eval_before: float) -> bool:
+        """Check if move is a retreat (piece moving to safety when under attack)"""
+        if eval_before > 100:
+            return False
+        
+        piece = board.piece_at(move.from_square)
+        if piece is None:
+            return False
+        
+        was_attacked = board.is_attacked_by(not board.turn, move.from_square)
+        
+        if not was_attacked:
+            return False
+        
+        board.push(move)
+        
+        is_attacked_after = board.is_attacked_by(board.turn, move.to_square)
+        
+        board.pop()
+        
+        return was_attacked and not is_attacked_after
+    
+    def _is_trades_when_losing(self, board: chess.Board, move: chess.Move, 
+                               eval_before: float) -> bool:
+        """Check if trading pieces when in a losing position"""
+        if eval_before > -100:
+            return False
+        
+        if not board.is_capture(move):
+            return False
+        
+        return True
+    
+    def _is_passive_move(self, board: chess.Board, move: chess.Move, 
+                        eval_before: float, eval_after: float) -> bool:
+        """Check if move is passive/waiting (maintains position without creating threats)"""
+        if board.is_capture(move):
+            return False
+        
+        board.push(move)
+        is_check = board.is_check()
+        board.pop()
+        
+        if is_check:
+            return False
+        
+        # Small or no evaluation change (maintaining position)
+        eval_change = abs(eval_after - eval_before)
+        if eval_change > 20:
+            return False
+        
+        # Not creating immediate threats
+        if self._is_attacking_move(board, move):
+            return False
+        
+        return True
 
 
 class PlaystyleLabeler:
     # Thresholds for classification
     AGGRESSIVE_THRESHOLDS = {
-        'checks_ratio': 0.2,  # checks per move
-        'captures_ratio': 0.25,
-        'sacrifices_ratio': 0.1,
-        'early_attacks': 3,
-        # 'avg_cp_loss_max': 45
+        'checks_ratio': 0.12, 
+        'captures_ratio': 0.22, 
+        'sacrifices_ratio': 0.04,
+        'early_attacks': 2,
     }
     
     POSITIONAL_THRESHOLDS = {
-        'prophylactic_ratio': 0.20,
-        'positional_sacrifices_ratio': 0.03,
-        # 'avg_cp_loss_max': 35,
-        'best_moves_ratio': 0.40
+        'prophylactic_ratio': 0.08,  
+        'positional_sacrifices_ratio': 0.012, 
+        'best_moves_ratio': 0.28  
     }
     
     DEFENSIVE_THRESHOLDS = {
-        'simplifications_ratio': 0.20,
-        'defensive_ratio': 0.15,
-        'counterattacks': 2
+        'simplifications_ratio': 0.16, 
+        'defensive_ratio': 0.10, 
+        'counterattacks': 1, 
+        'retreat_ratio': 0.09, 
+        'trades_when_losing_ratio': 0.12,
+        'passive_ratio': 0.13, 
     }
 
     @staticmethod
@@ -289,6 +338,9 @@ class PlaystyleLabeler:
         best_moves_ratio = features.best_moves_found / features.total_moves
         simplifications_ratio = features.simplifications / features.total_moves
         defensive_ratio = features.defensive_moves / features.total_moves
+        retreat_ratio = features.retreat_moves / features.total_moves
+        trades_when_losing_ratio = features.trades_when_losing / features.total_moves
+        passive_ratio = features.passive_moves / features.total_moves
         
         # Adjust thresholds if ELO provided
         if player_elo:
@@ -316,7 +368,7 @@ class PlaystyleLabeler:
         
         # Score positional style
         if prophylactic_ratio >= PlaystyleLabeler.POSITIONAL_THRESHOLDS['prophylactic_ratio']:
-            scores['positional'] += 1
+            scores['positional'] += 1.5
         if positional_sac_ratio >= PlaystyleLabeler.POSITIONAL_THRESHOLDS['positional_sacrifices_ratio']:
             scores['positional'] += 1
         if features.avg_centipawn_loss <= positional_cp_max:
@@ -330,6 +382,12 @@ class PlaystyleLabeler:
         if defensive_ratio >= PlaystyleLabeler.DEFENSIVE_THRESHOLDS['defensive_ratio']:
             scores['defensive'] += 1
         if features.counterattacks >= PlaystyleLabeler.DEFENSIVE_THRESHOLDS['counterattacks']:
+            scores['defensive'] += 1
+        if retreat_ratio >= PlaystyleLabeler.DEFENSIVE_THRESHOLDS['retreat_ratio']:
+            scores['defensive'] += 1
+        if trades_when_losing_ratio >= PlaystyleLabeler.DEFENSIVE_THRESHOLDS['trades_when_losing_ratio']:
+            scores['defensive'] += 1
+        if passive_ratio >= PlaystyleLabeler.DEFENSIVE_THRESHOLDS['passive_ratio']:
             scores['defensive'] += 1
         
         # Determine label
@@ -361,5 +419,8 @@ class PlaystyleLabeler:
             'prophylactic_moves': features.prophylactic_moves,
             'simplifications': features.simplifications,
             'tactical_shots': features.tactical_shots,
-            'blunders': features.blunders
+            'blunders': features.blunders,
+            'retreat_moves': features.retreat_moves,
+            'trades_when_losing': features.trades_when_losing,
+            'passive_moves': features.passive_moves
         }
