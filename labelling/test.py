@@ -1,8 +1,3 @@
-"""
-Simple test script to validate the chess analysis pipeline
-Creates a small sample PGN and tests the analyzer
-"""
-
 import chess.pgn
 from io import StringIO
 from chess_analyzer import ChessGameAnalyzer, PlaystyleLabeler
