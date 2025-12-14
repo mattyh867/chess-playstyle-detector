@@ -47,6 +47,8 @@ class ChessGameAnalyzer:
     def __init__(self, stockfish_path: str, depth: int = 18):
         """Initialize analyzer with Stockfish engine"""
         self.engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+        self.engine.configure({"Hash": 4096})
+        self.engine.configure({"Threads": 8}) 
         self.depth = depth
         
     def __del__(self):
@@ -280,10 +282,10 @@ class ChessGameAnalyzer:
 class PlaystyleLabeler:
     # Thresholds for classification
     AGGRESSIVE_THRESHOLDS = {
-        'checks_ratio': 0.12, 
-        'captures_ratio': 0.22, 
-        'sacrifices_ratio': 0.04,
-        'early_attacks': 2,
+        'checks_ratio': 0.14,
+        'captures_ratio': 0.24,      
+        'sacrifices_ratio': 0.04,  
+        'early_attacks': 2      
     }
     
     POSITIONAL_THRESHOLDS = {
@@ -394,7 +396,7 @@ class PlaystyleLabeler:
         max_score = max(scores.values())
         
         # If no clear winner or low scores, it's balanced
-        if max_score < 2:
+        if max_score < 2.0:
             return 'balanced'
         
         # Return the style with highest score

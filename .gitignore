@@ -69,3 +69,10 @@ htmlcov/
 # Environment variables
 .env
 .env.local
+
+# Temporary files
+*.tmp
+~$*
+~WRL*.tmp
+*.bak
+*.backup
