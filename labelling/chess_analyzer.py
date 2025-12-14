@@ -57,10 +57,7 @@ class ChessGameAnalyzer:
             self.engine.quit()
     
     def analyze_game(self, game: chess.pgn.Game, color: chess.Color) -> GameFeatures:
-        """
-        Analyze a game and extract features for one player
-        Returns GameFeatures object with extracted metrics
-        """
+        """Analyze a game and extract features for one player"""
         features = GameFeatures()
         board = game.board()
         moves = list(game.mainline_moves())
@@ -207,7 +204,7 @@ class ChessGameAnalyzer:
         return values.get(piece.piece_type, 0)
     
     def _is_attacking_move(self, board: chess.Board, move: chess.Move) -> bool:
-        """Check if move is attacking (creates threats)"""
+        """Check if move is attacking"""
         board.push(move)
         
         attacks = False
@@ -222,7 +219,7 @@ class ChessGameAnalyzer:
         return attacks
     
     def _is_retreat_move(self, board: chess.Board, move: chess.Move, eval_before: float) -> bool:
-        """Check if move is a retreat (piece moving to safety when under attack)"""
+        """Check if move is a retreat"""
         if eval_before > 100:
             return False
         
@@ -256,7 +253,7 @@ class ChessGameAnalyzer:
     
     def _is_passive_move(self, board: chess.Board, move: chess.Move, 
                         eval_before: float, eval_after: float) -> bool:
-        """Check if move is passive/waiting (maintains position without creating threats)"""
+        """Check if move is passive/waiting"""
         if board.is_capture(move):
             return False
         
@@ -318,10 +315,6 @@ class PlaystyleLabeler:
     
     @staticmethod
     def label_game(features: GameFeatures, player_elo: int = None) -> str:
-        """  
-        Returns:
-            One of: 'aggressive', 'positional', 'defensive', 'balanced'
-        """
         if features.total_moves == 0:
             return 'unknown'
         
