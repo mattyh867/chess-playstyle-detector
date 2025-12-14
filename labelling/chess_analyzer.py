@@ -267,7 +267,7 @@ class ChessGameAnalyzer:
         if is_check:
             return False
         
-        # Small or no evaluation change (maintaining position)
+        # Small or no evaluation change
         eval_change = abs(eval_after - eval_before)
         if eval_change > 20:
             return False
