@@ -6,7 +6,6 @@ from typing import List, Dict
 
 
 class BatchGameProcessor:
-    """Process multiple chess games from PGN files"""
     
     def __init__(self, stockfish_path: str, depth: int = 18, min_rating: int = 2000, max_games: int = 5000):
         self.analyzer = ChessGameAnalyzer(stockfish_path, depth)
@@ -52,7 +51,6 @@ class BatchGameProcessor:
                     if len(list(game.mainline_moves())) < 20:
                         continue
                     
-                    # Process both players
                     white_data = self._process_player(game, chess.WHITE, headers)
                     black_data = self._process_player(game, chess.BLACK, headers)
                     
@@ -66,12 +64,10 @@ class BatchGameProcessor:
                     if games_read % 100 == 0:  # Log every 100 games
                             print(f"Read {games_read} games, skipped {skipped_rating} due to rating")
                     
-                    # Progress update
                     if games_processed % 10 == 0:
                         print(f"Processed {games_processed} games... "
                               f"({len(results)} player datasets created)")
                     
-                    # Save intermediate results
                     if output_path and games_processed % save_interval == 0:
                         self._save_results(results, output_path, intermediate=True)
                     
@@ -79,10 +75,8 @@ class BatchGameProcessor:
                     print(f"Error processing game: {e}")
                     continue
         
-        # Create DataFrame
         df = pd.DataFrame(results)
         
-        # Save final results
         if output_path:
             self._save_results(results, output_path, intermediate=False)
         
@@ -95,16 +89,12 @@ class BatchGameProcessor:
     
     def _process_player(self, game: chess.pgn.Game, color: chess.Color, headers: Dict) -> Dict:
         try:
-            # Analyze game for this player
             features = self.analyzer.analyze_game(game, color)
             
-            # Get label
             label = self.labeler.label_game(features)
             
-            # Get feature summary
             summary = self.labeler.get_feature_summary(features)
             
-            # Compile data
             player_name = headers.get("White" if color == chess.WHITE else "Black", "Unknown")
             player_elo_str = headers.get("WhiteElo" if color == chess.WHITE else "BlackElo", "0")
             player_elo = int(player_elo_str) if player_elo_str != '?' else 0
@@ -119,7 +109,6 @@ class BatchGameProcessor:
                 'opening': headers.get("Opening", "Unknown"),
                 'label': label,
                 **summary,
-                # Raw features
                 'checks_given': features.checks_given,
                 'captures_made': features.captures_made,
                 'material_sacrifices': features.material_sacrifices,
@@ -145,7 +134,6 @@ class BatchGameProcessor:
     
     def _save_results(self, results: List[Dict], output_path: str, 
                      intermediate: bool = False):
-        """Save results to file"""
         df = pd.DataFrame(results)
         save_path = output_path
         
@@ -153,7 +141,6 @@ class BatchGameProcessor:
         print(f"Saved results to {save_path}")
     
     def _print_statistics(self, df: pd.DataFrame):
-        """Print dataset statistics"""
         print("\n" + "="*50)
         print("DATASET STATISTICS")
         print("="*50)
@@ -191,7 +178,6 @@ def main():
     
     args = parser.parse_args()
     
-    # Create processor
     processor = BatchGameProcessor(
         stockfish_path=args.stockfish,
         depth=args.depth,
@@ -199,7 +185,6 @@ def main():
         max_games=args.max_games
     )
     
-    # Process games
     df = processor.process_pgn_file(args.pgn, args.output)
     
     print(f"\nDataset saved to {args.output}")
